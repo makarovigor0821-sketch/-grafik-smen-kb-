@@ -116,8 +116,20 @@ private fun KbScheduleApp(prefs: android.content.SharedPreferences) {
             employeeIds.forEach { id -> put(id, saved?.optInt(id, 1)?.takeIf { it == 1 || it == 2 } ?: 1) }
         }
     }
+    val cellColors = remember {
+        mutableStateMapOf<Int, String>().apply {
+            val saved = runCatching { JSONObject(prefs.getString("cell_colors", "{}")) }.getOrNull()
+            put(0, saved?.optString("0")?.takeIf { it.matches(Regex("#[0-9A-Fa-f]{6}")) } ?: "#F0F0F2")
+            put(1, saved?.optString("1")?.takeIf { it.matches(Regex("#[0-9A-Fa-f]{6}")) } ?: "#FFC94A")
+            put(2, saved?.optString("2")?.takeIf { it.matches(Regex("#[0-9A-Fa-f]{6}")) } ?: "#2384F5")
+            put(3, saved?.optString("3")?.takeIf { it.matches(Regex("#[0-9A-Fa-f]{6}")) } ?: "#FFE1E1")
+            put(4, saved?.optString("4")?.takeIf { it.matches(Regex("#[0-9A-Fa-f]{6}")) } ?: "#DDF3E4")
+        }
+    }
     var month by remember { mutableStateOf(YearMonth.now()) }
     var addDialog by remember { mutableStateOf(false) }
+    var colorsDialog by remember { mutableStateOf(false) }
+    var colorType by remember { mutableIntStateOf(1) }
     var deleteIndex by remember { mutableStateOf<Int?>(null) }
     var newName by remember { mutableStateOf("") }
     val employeeScroll = rememberScrollState()
@@ -145,10 +157,12 @@ private fun KbScheduleApp(prefs: android.content.SharedPreferences) {
         val textsJson = JSONObject().also { o -> cellText.forEach { (k,v) -> o.put(k,v) } }
         val typesJson = JSONObject().also { o -> cellTypes.forEach { (k,v) -> o.put(k,v) } }
         val modesJson = JSONObject().also { o -> employeeModes.forEach { (k,v) -> o.put(k,v) } }
+        val colorsJson = JSONObject().also { o -> cellColors.forEach { (k,v) -> o.put(k,v) } }
         prefs.edit().putString("employees", employeeJson.toString())
             .putString("employee_ids", idsJson.toString())
             .putString("texts", textsJson.toString()).putString("types", typesJson.toString())
-            .putString("employee_modes", modesJson.toString()).apply()
+            .putString("employee_modes", modesJson.toString())
+            .putString("cell_colors", colorsJson.toString()).apply()
     }
 
     MaterialTheme(colorScheme = lightColorScheme(primary = Red, background = Canvas, surface = Card, onSurface = Ink)) {
@@ -168,6 +182,9 @@ private fun KbScheduleApp(prefs: android.content.SharedPreferences) {
                         IconButton(onClick = { month = month.plusMonths(1) }, modifier = Modifier.size(36.dp)) {
                             Icon(Icons.Default.ChevronRight, null)
                         }
+                    }
+                    TextButton(onClick = { colorsDialog = true }, contentPadding = PaddingValues(horizontal = 7.dp)) {
+                        Text("Цвета", color = Color(0xFF5B62A8), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                     TextButton(
                         onClick = { exportLauncher.launch("График_смен_${month.monthValue}_${month.year}.xlsx") },
@@ -222,7 +239,7 @@ private fun KbScheduleApp(prefs: android.content.SharedPreferences) {
                                         Spacer(Modifier.height(3.dp))
                                         Box(
                                             Modifier.fillMaxWidth().height(23.dp)
-                                                .background(if (mode == 1) EarlyShift else LateShift, RoundedCornerShape(6.dp))
+                                                .background(Color(android.graphics.Color.parseColor(cellColors[mode] ?: if (mode == 1) "#FFC94A" else "#2384F5")), RoundedCornerShape(6.dp))
                                                 .clickable { employeeModes[employeeId] = if (mode == 1) 2 else 1; save() },
                                             contentAlignment = Alignment.Center
                                         ) {
@@ -243,13 +260,13 @@ private fun KbScheduleApp(prefs: android.content.SharedPreferences) {
                                         val shiftType = cellTypes[key] ?: 0
                                         val isShift = shiftType == 1 || shiftType == 2
                                         val label = cellText[key].orEmpty()
-                                        val cellColor = when (shiftType) {
-                                            1 -> EarlyShift
-                                            2 -> LateShift
-                                            3 -> SickDay
-                                            4 -> VacationDay
-                                            else -> Off
-                                        }
+                                        val cellColor = Color(android.graphics.Color.parseColor(cellColors[shiftType] ?: when (shiftType) {
+                                            1 -> "#FFC94A"
+                                            2 -> "#2384F5"
+                                            3 -> "#FFE1E1"
+                                            4 -> "#DDF3E4"
+                                            else -> "#F0F0F2"
+                                        }))
                                         Box(
                                             Modifier.weight(1f).fillMaxHeight().padding(1.dp)
                                                 .background(cellColor, RoundedCornerShape(4.dp))
@@ -292,15 +309,55 @@ private fun KbScheduleApp(prefs: android.content.SharedPreferences) {
                     }
                 }
                 Row(Modifier.fillMaxWidth().height(22.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    LegendDot(EarlyShift, "До 16:00")
-                    LegendDot(LateShift, "С 16:00")
-                    LegendDot(Off, "Выходной")
-                    LegendDot(SickDay, "БС")
-                    LegendDot(VacationDay, "ОТ")
+                    LegendDot(Color(android.graphics.Color.parseColor(cellColors[1] ?: "#FFC94A")), "До 16:00")
+                    LegendDot(Color(android.graphics.Color.parseColor(cellColors[2] ?: "#2384F5")), "С 16:00")
+                    LegendDot(Color(android.graphics.Color.parseColor(cellColors[0] ?: "#F0F0F2")), "Выходной")
+                    LegendDot(Color(android.graphics.Color.parseColor(cellColors[3] ?: "#FFE1E1")), "БС")
+                    LegendDot(Color(android.graphics.Color.parseColor(cellColors[4] ?: "#DDF3E4")), "ОТ")
                     Text("Долгое нажатие — отсутствие", fontSize = 9.sp, color = Muted)
                 }
             }
         }
+    }
+
+    if (colorsDialog) {
+        val palette = listOf("#FFC94A", "#2384F5", "#35B86B", "#EF5350", "#9B59B6", "#26A69A", "#FF8A3D", "#8D99AE", "#242428", "#F0F0F2")
+        val types = listOf(1 to "До 16:00", 2 to "С 16:00", 0 to "Выходной", 3 to "БС", 4 to "ОТ")
+        AlertDialog(
+            onDismissRequest = { colorsDialog = false },
+            title = { Text("Цвета графика") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    types.forEach { (type, label) ->
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(label, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                            Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
+                                palette.forEach { hex ->
+                                    Box(
+                                        Modifier.size(25.dp)
+                                            .background(Color(android.graphics.Color.parseColor(hex)), RoundedCornerShape(7.dp))
+                                            .then(if ((cellColors[type] ?: "") == hex) Modifier.border(2.dp, Red, RoundedCornerShape(7.dp)) else Modifier)
+                                            .clickable {
+                                                cellColors[type] = hex
+                                                save()
+                                            }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Text("Выбранные цвета сохраняются и сразу применяются к ячейкам.", color = Muted, fontSize = 10.sp)
+                }
+            },
+            confirmButton = { TextButton(onClick = { colorsDialog = false }) { Text("Готово", color = Red) } },
+            dismissButton = {
+                TextButton(onClick = {
+                    cellColors[0] = "#F0F0F2"; cellColors[1] = "#FFC94A"; cellColors[2] = "#2384F5"
+                    cellColors[3] = "#FFE1E1"; cellColors[4] = "#DDF3E4"
+                    save()
+                }) { Text("Сбросить") }
+            }
+        )
     }
 
     if (addDialog) {
