@@ -90,6 +90,14 @@ private fun KbScheduleApp(prefs: android.content.SharedPreferences) {
         val o = runCatching { JSONObject(prefs.getString("types", "{}")) }.getOrNull()
         o?.keys()?.forEach { k -> put(k, o.optInt(k)) }
     } }
+    val cellStarts = remember { mutableStateMapOf<String, String>().apply {
+        val o = runCatching { JSONObject(prefs.getString("starts", "{}")) }.getOrNull()
+        o?.keys()?.forEach { k -> put(k, o.optString(k)) }
+    } }
+    val cellEnds = remember { mutableStateMapOf<String, String>().apply {
+        val o = runCatching { JSONObject(prefs.getString("ends", "{}")) }.getOrNull()
+        o?.keys()?.forEach { k -> put(k, o.optString(k)) }
+    } }
     // Migrate cells saved by the previous version, where the employee name hash was used as an ID.
     remember {
         names.forEachIndexed { index, name ->
@@ -134,6 +142,9 @@ private fun KbScheduleApp(prefs: android.content.SharedPreferences) {
     var newName by remember { mutableStateOf("") }
     val employeeScroll = rememberScrollState()
     var selectedCell by remember { mutableStateOf<String?>(null) }
+    var timePickerCell by remember { mutableStateOf<String?>(null) }
+    var timePickerKind by remember { mutableStateOf("С") }
+    var totalsDialog by remember { mutableStateOf(false) }
     var editCaptionCell by remember { mutableStateOf<String?>(null) }
     var editText by remember { mutableStateOf("") }
     val context = LocalContext.current
@@ -144,7 +155,7 @@ private fun KbScheduleApp(prefs: android.content.SharedPreferences) {
             val result = runCatching {
                 val output = context.contentResolver.openOutputStream(uri) ?: error("Не удалось создать файл")
                 output.use {
-                    writeScheduleXlsx(it, names.toList(), employeeIds.toList(), month, cellTypes.toMap(), cellText.toMap())
+                    writeScheduleXlsx(it, names.toList(), employeeIds.toList(), month, cellTypes.toMap(), cellText.toMap(), cellStarts.toMap(), cellEnds.toMap())
                 }
             }
             Toast.makeText(context, if (result.isSuccess) "Excel-файл сохранён" else "Ошибка экспорта", Toast.LENGTH_LONG).show()
@@ -157,11 +168,14 @@ private fun KbScheduleApp(prefs: android.content.SharedPreferences) {
         val textsJson = JSONObject().also { o -> cellText.forEach { (k,v) -> o.put(k,v) } }
         val typesJson = JSONObject().also { o -> cellTypes.forEach { (k,v) -> o.put(k,v) } }
         val modesJson = JSONObject().also { o -> employeeModes.forEach { (k,v) -> o.put(k,v) } }
+        val startsJson = JSONObject().also { o -> cellStarts.forEach { (k,v) -> o.put(k,v) } }
+        val endsJson = JSONObject().also { o -> cellEnds.forEach { (k,v) -> o.put(k,v) } }
         val colorsJson = JSONObject().also { o -> cellColors.forEach { (k,v) -> o.put(k,v) } }
         prefs.edit().putString("employees", employeeJson.toString())
             .putString("employee_ids", idsJson.toString())
             .putString("texts", textsJson.toString()).putString("types", typesJson.toString())
             .putString("employee_modes", modesJson.toString())
+            .putString("starts", startsJson.toString()).putString("ends", endsJson.toString())
             .putString("cell_colors", colorsJson.toString()).apply()
     }
 
@@ -182,6 +196,9 @@ private fun KbScheduleApp(prefs: android.content.SharedPreferences) {
                         IconButton(onClick = { month = month.plusMonths(1) }, modifier = Modifier.size(36.dp)) {
                             Icon(Icons.Default.ChevronRight, null)
                         }
+                    }
+                    TextButton(onClick = { totalsDialog = true }, contentPadding = PaddingValues(horizontal = 7.dp)) {
+                        Text("Итоги", color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                     TextButton(onClick = { colorsDialog = true }, contentPadding = PaddingValues(horizontal = 7.dp)) {
                         Text("Цвета", color = Color(0xFF5B62A8), fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -243,7 +260,7 @@ private fun KbScheduleApp(prefs: android.content.SharedPreferences) {
                                                 .clickable { employeeModes[employeeId] = if (mode == 1) 2 else 1; save() },
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            Text(if (mode == 1) "До 16:00" else "С 16:00", color = if (mode == 1) Ink else Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                            Text("Смена", color = if (mode == 1) Ink else Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                         }
                                     }
                                     IconButton(onClick = { deleteIndex = index }, modifier = Modifier.size(26.dp)) {
@@ -272,9 +289,11 @@ private fun KbScheduleApp(prefs: android.content.SharedPreferences) {
                                                 .background(cellColor, RoundedCornerShape(4.dp))
                                                 .combinedClickable(
                                                     onClick = {
-                                                        if (shiftType != 0) {
+                                                        if (shiftType != 0 || cellStarts.containsKey(key) || cellEnds.containsKey(key)) {
                                                             cellTypes.remove(key)
                                                             cellText.remove(key)
+                                                            cellStarts.remove(key)
+                                                            cellEnds.remove(key)
                                                         } else {
                                                             cellTypes[key] = employeeModes[employeeIds[index]] ?: 1
                                                             cellText.remove(key)
@@ -288,16 +307,20 @@ private fun KbScheduleApp(prefs: android.content.SharedPreferences) {
                                             contentAlignment = Alignment.Center
                                         ) {
                                             when (shiftType) {
-                                                1 -> Text(
-                                                    if (label.isNotBlank()) label else "До\n16:00",
-                                                    color = Ink, fontSize = 7.sp, lineHeight = 8.sp,
-                                                    fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 2
-                                                )
-                                                2 -> Text(
-                                                    if (label.isNotBlank()) label else "С\n16:00",
-                                                    color = Color.White, fontSize = 7.sp, lineHeight = 8.sp,
-                                                    fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 2
-                                                )
+                                                1, 2 -> {
+                                                    val start = cellStarts[key]
+                                                    val end = cellEnds[key]
+                                                    val timeLabel = when {
+                                                        start != null && end != null -> "С $start\nДО $end"
+                                                        start != null -> "С $start"
+                                                        end != null -> "ДО $end"
+                                                        label.isNotBlank() -> label
+                                                        else -> "СМЕНА"
+                                                    }
+                                                    Text(timeLabel, color = if (shiftType == 1) Ink else Color.White,
+                                                        fontSize = 6.sp, lineHeight = 7.sp, fontWeight = FontWeight.Bold,
+                                                        textAlign = TextAlign.Center, maxLines = 3)
+                                                }
                                                 3 -> Text("БС", color = SickText, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                                                 4 -> Text("ОТ", color = VacationText, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                                             }
@@ -309,8 +332,7 @@ private fun KbScheduleApp(prefs: android.content.SharedPreferences) {
                     }
                 }
                 Row(Modifier.fillMaxWidth().height(22.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    LegendDot(Color(android.graphics.Color.parseColor(cellColors[1] ?: "#FFC94A")), "До 16:00")
-                    LegendDot(Color(android.graphics.Color.parseColor(cellColors[2] ?: "#2384F5")), "С 16:00")
+                    LegendDot(Color(android.graphics.Color.parseColor(cellColors[1] ?: "#FFC94A")), "Смена")
                     LegendDot(Color(android.graphics.Color.parseColor(cellColors[0] ?: "#F0F0F2")), "Выходной")
                     LegendDot(Color(android.graphics.Color.parseColor(cellColors[3] ?: "#FFE1E1")), "БС")
                     LegendDot(Color(android.graphics.Color.parseColor(cellColors[4] ?: "#DDF3E4")), "ОТ")
@@ -322,7 +344,7 @@ private fun KbScheduleApp(prefs: android.content.SharedPreferences) {
 
     if (colorsDialog) {
         val palette = listOf("#FFC94A", "#2384F5", "#35B86B", "#EF5350", "#9B59B6", "#26A69A", "#FF8A3D", "#8D99AE", "#242428", "#F0F0F2")
-        val types = listOf(1 to "До 16:00", 2 to "С 16:00", 0 to "Выходной", 3 to "БС", 4 to "ОТ")
+        val types = listOf(1 to "Смена", 0 to "Выходной", 3 to "БС", 4 to "ОТ")
         AlertDialog(
             onDismissRequest = { colorsDialog = false },
             title = { Text("Цвета графика") },
@@ -407,39 +429,99 @@ private fun KbScheduleApp(prefs: android.content.SharedPreferences) {
         AlertDialog(
             onDismissRequest = { selectedCell = null },
             title = { Text("Отметка дня") },
-            text = { Text("Выберите отсутствие или очистите ячейку.") },
+            text = { Text("Выберите время начала или окончания смены либо отметьте отсутствие.") },
             confirmButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    TextButton(onClick = { timePickerKind = "С"; timePickerCell = key; selectedCell = null }) { Text("С") }
+                    TextButton(onClick = { timePickerKind = "ДО"; timePickerCell = key; selectedCell = null }) { Text("ДО") }
                     TextButton(onClick = {
                         cellTypes[key] = 3
-                        cellText.remove(key)
-                        save()
-                        selectedCell = null
+                        cellText.remove(key); cellStarts.remove(key); cellEnds.remove(key)
+                        save(); selectedCell = null
                     }) { Text("БС", color = SickText) }
                     TextButton(onClick = {
                         cellTypes[key] = 4
-                        cellText.remove(key)
-                        save()
-                        selectedCell = null
+                        cellText.remove(key); cellStarts.remove(key); cellEnds.remove(key)
+                        save(); selectedCell = null
                     }) { Text("ОТ", color = VacationText) }
                     TextButton(onClick = {
-                        cellTypes.remove(key)
-                        cellText.remove(key)
-                        save()
-                        selectedCell = null
+                        cellTypes.remove(key); cellText.remove(key); cellStarts.remove(key); cellEnds.remove(key)
+                        save(); selectedCell = null
                     }) { Text("Очистить", color = Red) }
                 }
             },
-            dismissButton = {
-                Row {
-                    TextButton(onClick = {
-                        editText = cellText[key].orEmpty()
-                        editCaptionCell = key
-                        selectedCell = null
-                    }) { Text("Подпись смены") }
-                    TextButton(onClick = { selectedCell = null }) { Text("Отмена") }
+            dismissButton = { TextButton(onClick = { selectedCell = null }) { Text("Отмена") } }
+        )
+    }
+    timePickerCell?.let { key ->
+        val options = (0..23).map { String.format(Locale.ROOT, "%02d:00", it) }
+        AlertDialog(
+            onDismissRequest = { timePickerCell = null },
+            title = { Text(if (timePickerKind == "С") "Время начала смены" else "Время окончания смены") },
+            text = {
+                Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    options.chunked(4).forEach { group ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            group.forEach { time ->
+                                TextButton(
+                                    onClick = {
+                                        if (timePickerKind == "С") cellStarts[key] = time else cellEnds[key] = time
+                                        if ((cellTypes[key] ?: 0) !in 3..4) cellTypes[key] = 1
+                                        cellText.remove(key)
+                                        save()
+                                        timePickerCell = null
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) { Text(time, fontSize = 12.sp) }
+                            }
+                            repeat(4 - group.size) { Spacer(Modifier.weight(1f)) }
+                        }
+                    }
                 }
+            },
+            confirmButton = { TextButton(onClick = { timePickerCell = null }) { Text("Закрыть") } }
+        )
+    }
+    if (totalsDialog) {
+        fun creditedMinutes(employeeId: String): Int {
+            var total = 0
+            for (day in 1..month.lengthOfMonth()) {
+                val key = "$employeeId-${month.year}-${month.monthValue}-$day"
+                val start = cellStarts[key] ?: continue
+                val end = cellEnds[key] ?: continue
+                val startParts = start.split(":")
+                val endParts = end.split(":")
+                val startMin = startParts[0].toInt() * 60 + startParts[1].toInt()
+                val endMin = endParts[0].toInt() * 60 + endParts[1].toInt()
+                val elapsed = if (endMin > startMin) endMin - startMin else endMin + 1440 - startMin
+                total += (elapsed - 60).coerceAtLeast(0)
             }
+            return total
+        }
+        val teamMinutes = employeeIds.sumOf { creditedMinutes(it) }
+        AlertDialog(
+            onDismissRequest = { totalsDialog = false },
+            title = { Text("Итоги за месяц") },
+            text = {
+                Column(Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Всего по команде: ${teamMinutes / 60} ч ${teamMinutes % 60} мин",
+                        fontWeight = FontWeight.Bold, color = Red)
+                    Divider()
+                    names.forEachIndexed { index, name ->
+                        val minutes = creditedMinutes(employeeIds[index])
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(name, modifier = Modifier.weight(1f), fontSize = 12.sp)
+                            Text("${minutes / 60} ч ${minutes % 60} мин",
+                                fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                    }
+                    Text("Из каждой смены автоматически вычтен 1 час на обед. Неполные отметки времени не учитываются.",
+                        color = Muted, fontSize = 10.sp)
+                }
+            },
+            confirmButton = { TextButton(onClick = { totalsDialog = false }) { Text("Готово") } }
         )
     }
     editCaptionCell?.let { key ->
@@ -489,7 +571,9 @@ private fun writeScheduleXlsx(
     employeeIds: List<String>,
     month: YearMonth,
     cellTypes: Map<String, Int>,
-    cellText: Map<String, String>
+    cellText: Map<String, String>,
+    cellStarts: Map<String, String>,
+    cellEnds: Map<String, String>
 ) {
     val sheet = StringBuilder()
     val lastCol = excelColumn(month.lengthOfMonth() + 1)
@@ -518,8 +602,16 @@ private fun writeScheduleXlsx(
             val type = cellTypes[key] ?: 0
             if (type in 1..4) {
                 val label = when (type) {
-                    1 -> cellText[key].orEmpty().ifBlank { "До 16:00" }
-                    2 -> cellText[key].orEmpty().ifBlank { "С 16:00" }
+                    1, 2 -> {
+                        val start = cellStarts[key]
+                        val end = cellEnds[key]
+                        when {
+                            start != null && end != null -> "С $start / ДО $end"
+                            start != null -> "С $start"
+                            end != null -> "ДО $end"
+                            else -> cellText[key].orEmpty().ifBlank { "СМЕНА" }
+                        }
+                    }
                     3 -> "БС"
                     else -> "ОТ"
                 }
