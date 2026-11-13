@@ -415,6 +415,8 @@ private fun KbScheduleApp(prefs: android.content.SharedPreferences) {
                         val prefix = id + "-"
                         cellTypes.keys.filter { it.startsWith(prefix) }.forEach { cellTypes.remove(it) }
                         cellText.keys.filter { it.startsWith(prefix) }.forEach { cellText.remove(it) }
+                        cellStarts.keys.filter { it.startsWith(prefix) }.forEach { cellStarts.remove(it) }
+                        cellEnds.keys.filter { it.startsWith(prefix) }.forEach { cellEnds.remove(it) }
                         names.removeAt(index)
                         employeeIds.removeAt(index)
                         save()
@@ -454,7 +456,7 @@ private fun KbScheduleApp(prefs: android.content.SharedPreferences) {
         )
     }
     timePickerCell?.let { key ->
-        val options = (0..23).map { String.format(Locale.ROOT, "%02d:00", it) }
+        val options = (0..47).map { String.format(Locale.ROOT, "%02d:%02d", it / 2, if (it % 2 == 0) 0 else 30) }
         AlertDialog(
             onDismissRequest = { timePickerCell = null },
             title = { Text(if (timePickerKind == "С") "Время начала смены" else "Время окончания смены") },
