@@ -271,9 +271,18 @@ private fun KbScheduleApp(prefs: android.content.SharedPreferences) {
                                             contentAlignment = Alignment.Center
                                         ) {
                                             when (shiftType) {
+                                                1 -> Text(
+                                                    if (label.isNotBlank()) label else "До\n16:00",
+                                                    color = Ink, fontSize = 7.sp, lineHeight = 8.sp,
+                                                    fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 2
+                                                )
+                                                2 -> Text(
+                                                    if (label.isNotBlank()) label else "С\n16:00",
+                                                    color = Color.White, fontSize = 7.sp, lineHeight = 8.sp,
+                                                    fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 2
+                                                )
                                                 3 -> Text("БС", color = SickText, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                                                 4 -> Text("ОТ", color = VacationText, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                                                else -> if (isShift && label.isNotBlank()) Text(label, color = if (shiftType == 2) Color.White else Ink, fontSize = 8.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                                             }
                                         }
                                     }
