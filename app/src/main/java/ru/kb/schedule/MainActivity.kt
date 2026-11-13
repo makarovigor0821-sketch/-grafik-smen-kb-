@@ -141,6 +141,13 @@ private fun KbScheduleApp(prefs: android.content.SharedPreferences) {
     var deleteIndex by remember { mutableStateOf<Int?>(null) }
     var newName by remember { mutableStateOf("") }
     val employeeScroll = rememberScrollState()
+    var scrollToNewEmployee by remember { mutableStateOf(false) }
+    LaunchedEffect(names.size) {
+        if (scrollToNewEmployee) {
+            employeeScroll.animateScrollTo(employeeScroll.maxValue)
+            scrollToNewEmployee = false
+        }
+    }
     var selectedCell by remember { mutableStateOf<String?>(null) }
     var timePickerCell by remember { mutableStateOf<String?>(null) }
     var timePickerKind by remember { mutableStateOf("С") }
@@ -248,22 +255,22 @@ private fun KbScheduleApp(prefs: android.content.SharedPreferences) {
                                 val employeeId = employeeIds[index]
                                 val mode = employeeModes[employeeId] ?: 1
                                 Row(
-                                    Modifier.fillMaxWidth().height(66.dp).border(0.5.dp, Color(0xFFE5E5E8)).padding(horizontal = 5.dp, vertical = 3.dp),
+                                    Modifier.fillMaxWidth().height(46.dp).border(0.5.dp, Color(0xFFE5E5E8)).padding(horizontal = 4.dp, vertical = 2.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
                                         Text(name, fontWeight = FontWeight.Medium, fontSize = 11.sp, maxLines = 2, lineHeight = 13.sp)
-                                        Spacer(Modifier.height(3.dp))
+                                        Spacer(Modifier.height(1.dp))
                                         Box(
-                                            Modifier.fillMaxWidth().height(23.dp)
+                                            Modifier.fillMaxWidth().height(17.dp)
                                                 .background(Color(android.graphics.Color.parseColor(cellColors[mode] ?: if (mode == 1) "#FFC94A" else "#2384F5")), RoundedCornerShape(6.dp))
                                                 .clickable { employeeModes[employeeId] = if (mode == 1) 2 else 1; save() },
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            Text("Смена", color = if (mode == 1) Ink else Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                            Text("Смена", color = if (mode == 1) Ink else Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                                         }
                                     }
-                                    IconButton(onClick = { deleteIndex = index }, modifier = Modifier.size(26.dp)) {
+                                    IconButton(onClick = { deleteIndex = index }, modifier = Modifier.size(22.dp)) {
                                         Icon(Icons.Default.Close, contentDescription = "Удалить сотрудника", tint = Red, modifier = Modifier.size(14.dp))
                                     }
                                 }
@@ -271,7 +278,7 @@ private fun KbScheduleApp(prefs: android.content.SharedPreferences) {
                         }
                         Column(Modifier.weight(1f)) {
                             names.forEachIndexed { index, name ->
-                                Row(Modifier.fillMaxWidth().height(66.dp)) {
+                                Row(Modifier.fillMaxWidth().height(46.dp)) {
                                     for (day in 1..month.lengthOfMonth()) {
                                         val key = employeeIds[index] + "-" + month.year + "-" + month.monthValue + "-" + day
                                         val shiftType = cellTypes[key] ?: 0
@@ -392,6 +399,7 @@ private fun KbScheduleApp(prefs: android.content.SharedPreferences) {
                     if (newName.isNotBlank()) {
                         names.add(newName.trim())
                         employeeIds.add("emp_" + System.currentTimeMillis() + "_" + employeeIds.size)
+                        scrollToNewEmployee = true
                         save()
                         newName = ""
                     }
