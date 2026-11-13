@@ -449,10 +449,16 @@ private fun writeScheduleXlsx(
         sheet.append("<c r=\"A$row\" s=\"3\" t=\"inlineStr\"><is><t xml:space=\"preserve\">${xmlEscape(name)}</t></is></c>")
         for (day in 1..month.lengthOfMonth()) {
             val key = employeeIds.getOrNull(index).orEmpty() + "-${month.year}-${month.monthValue}-$day"
-            if ((cellTypes[key] ?: 0) == 1 || (cellTypes[key] ?: 0) == 2) {
-                val label = cellText[key].orEmpty().ifBlank { if ((cellTypes[key] ?: 1) == 2) "С 16:00" else "До 16:00" }
+            val type = cellTypes[key] ?: 0
+            if (type in 1..4) {
+                val label = when (type) {
+                    1 -> cellText[key].orEmpty().ifBlank { "До 16:00" }
+                    2 -> cellText[key].orEmpty().ifBlank { "С 16:00" }
+                    3 -> "БС"
+                    else -> "ОТ"
+                }
                 val ref = "${excelColumn(day + 1)}$row"
-                val style = if ((cellTypes[key] ?: 1) == 2) 4 else 3
+                val style = when (type) { 1 -> 3; 2 -> 4; 3 -> 5; else -> 6 }
                 sheet.append("<c r=\"$ref\" s=\"$style\" t=\"inlineStr\"><is><t>${xmlEscape(label)}</t></is></c>")
             }
         }
@@ -463,10 +469,10 @@ private fun writeScheduleXlsx(
     val styles = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><color rgb="FFFFFFFF"/><sz val="10"/><name val="Calibri"/></font><font><b/><sz val="10"/><name val="Calibri"/></font></fonts>
-<fills count="5"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE31E24"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFC94A"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FF2384F5"/><bgColor indexed="64"/></patternFill></fill></fills>
+<fills count="7"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE31E24"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFC94A"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FF2384F5"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFE1E1"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFDDF3E4"/><bgColor indexed="64"/></patternFill></fill></fills>
 <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="2" fillId="0" borderId="0" applyAlignment="1"><alignment vertical="center"/></xf><xf numFmtId="0" fontId="2" fillId="3" borderId="0" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="1" fillId="4" borderId="0" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf></cellXfs>
+<cellXfs count="7"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="2" fillId="0" borderId="0" applyAlignment="1"><alignment vertical="center"/></xf><xf numFmtId="0" fontId="2" fillId="3" borderId="0" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="1" fillId="4" borderId="0" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf><xf numFmtId="0" fontId="2" fillId="5" borderId="0" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="2" fillId="6" borderId="0" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf></cellXfs>
 </styleSheet>"""
 
     ZipOutputStream(output).use { zip ->
