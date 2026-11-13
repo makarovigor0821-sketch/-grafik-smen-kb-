@@ -170,7 +170,7 @@ private fun KbScheduleApp(prefs: android.content.SharedPreferences) {
         val modesJson = JSONObject().also { o -> employeeModes.forEach { (k,v) -> o.put(k,v) } }
         val startsJson = JSONObject().also { o -> cellStarts.forEach { (k,v) -> o.put(k,v) } }
         val endsJson = JSONObject().also { o -> cellEnds.forEach { (k,v) -> o.put(k,v) } }
-        val colorsJson = JSONObject().also { o -> cellColors.forEach { (k,v) -> o.put(k,v) } }
+        val colorsJson = JSONObject().also { o -> cellColors.forEach { (k,v) -> o.put(k.toString(),v) } }
         prefs.edit().putString("employees", employeeJson.toString())
             .putString("employee_ids", idsJson.toString())
             .putString("texts", textsJson.toString()).putString("types", typesJson.toString())
