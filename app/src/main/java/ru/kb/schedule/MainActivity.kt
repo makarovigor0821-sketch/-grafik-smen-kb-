@@ -49,6 +49,10 @@ private val ShiftBlack = Color(0xFF171719)
 private val Off = Color(0xFFF0F0F2)
 private val EarlyShift = Color(0xFFFFC94A)
 private val LateShift = Color(0xFF2384F5)
+private val SickDay = Color(0xFFFFE1E1)
+private val SickText = Color(0xFFB3261E)
+private val VacationDay = Color(0xFFDDF3E4)
+private val VacationText = Color(0xFF187443)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -118,6 +122,7 @@ private fun KbScheduleApp(prefs: android.content.SharedPreferences) {
     var newName by remember { mutableStateOf("") }
     val employeeScroll = rememberScrollState()
     var selectedCell by remember { mutableStateOf<String?>(null) }
+    var editCaptionCell by remember { mutableStateOf<String?>(null) }
     var editText by remember { mutableStateOf("") }
     val context = LocalContext.current
     val exportLauncher = rememberLauncherForActivityResult(
@@ -238,12 +243,19 @@ private fun KbScheduleApp(prefs: android.content.SharedPreferences) {
                                         val shiftType = cellTypes[key] ?: 0
                                         val isShift = shiftType == 1 || shiftType == 2
                                         val label = cellText[key].orEmpty()
+                                        val cellColor = when (shiftType) {
+                                            1 -> EarlyShift
+                                            2 -> LateShift
+                                            3 -> SickDay
+                                            4 -> VacationDay
+                                            else -> Off
+                                        }
                                         Box(
                                             Modifier.weight(1f).fillMaxHeight().padding(1.dp)
-                                                .background(if (!isShift) Off else if (shiftType == 2) LateShift else EarlyShift, RoundedCornerShape(4.dp))
+                                                .background(cellColor, RoundedCornerShape(4.dp))
                                                 .combinedClickable(
                                                     onClick = {
-                                                        if (isShift) {
+                                                        if (shiftType != 0) {
                                                             cellTypes.remove(key)
                                                             cellText.remove(key)
                                                         } else {
@@ -254,12 +266,15 @@ private fun KbScheduleApp(prefs: android.content.SharedPreferences) {
                                                     },
                                                     onLongClick = {
                                                         selectedCell = key
-                                                        editText = label
                                                     }
                                                 ),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            if (isShift && label.isNotBlank()) Text(label, color = if (shiftType == 2) Color.White else Ink, fontSize = 8.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                                            when (shiftType) {
+                                                3 -> Text("БС", color = SickText, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                                4 -> Text("ОТ", color = VacationText, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                                else -> if (isShift && label.isNotBlank()) Text(label, color = if (shiftType == 2) Color.White else Ink, fontSize = 8.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                                            }
                                         }
                                     }
                                 }
@@ -271,7 +286,9 @@ private fun KbScheduleApp(prefs: android.content.SharedPreferences) {
                     LegendDot(EarlyShift, "До 16:00")
                     LegendDot(LateShift, "С 16:00")
                     LegendDot(Off, "Выходной")
-                    Text("Кнопка у имени задаёт тип новой смены", fontSize = 9.sp, color = Muted)
+                    LegendDot(SickDay, "БС")
+                    LegendDot(VacationDay, "ОТ")
+                    Text("Долгое нажатие — отсутствие", fontSize = 9.sp, color = Muted)
                 }
             }
         }
@@ -323,6 +340,45 @@ private fun KbScheduleApp(prefs: android.content.SharedPreferences) {
     selectedCell?.let { key ->
         AlertDialog(
             onDismissRequest = { selectedCell = null },
+            title = { Text("Отметка дня") },
+            text = { Text("Выберите отсутствие или очистите ячейку.") },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = {
+                        cellTypes[key] = 3
+                        cellText.remove(key)
+                        save()
+                        selectedCell = null
+                    }) { Text("БС", color = SickText) }
+                    TextButton(onClick = {
+                        cellTypes[key] = 4
+                        cellText.remove(key)
+                        save()
+                        selectedCell = null
+                    }) { Text("ОТ", color = VacationText) }
+                    TextButton(onClick = {
+                        cellTypes.remove(key)
+                        cellText.remove(key)
+                        save()
+                        selectedCell = null
+                    }) { Text("Очистить", color = Red) }
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        editText = cellText[key].orEmpty()
+                        editCaptionCell = key
+                        selectedCell = null
+                    }) { Text("Подпись смены") }
+                    TextButton(onClick = { selectedCell = null }) { Text("Отмена") }
+                }
+            }
+        )
+    }
+    editCaptionCell?.let { key ->
+        AlertDialog(
+            onDismissRequest = { editCaptionCell = null },
             title = { Text("Подпись смены") },
             text = { OutlinedTextField(value = editText, onValueChange = { editText = it }, label = { Text("Например: 08:00–20:00") }, singleLine = true) },
             confirmButton = {
@@ -330,10 +386,10 @@ private fun KbScheduleApp(prefs: android.content.SharedPreferences) {
                     if (editText.isBlank()) cellText.remove(key) else cellText[key] = editText
                     if ((cellTypes[key] ?: 0) == 0) cellTypes[key] = employeeModes[key.substringBefore("-")] ?: 1
                     save()
-                    selectedCell = null
+                    editCaptionCell = null
                 }) { Text("Сохранить", color = Red) }
             },
-            dismissButton = { TextButton(onClick = { selectedCell = null }) { Text("Отмена") } }
+            dismissButton = { TextButton(onClick = { editCaptionCell = null }) { Text("Отмена") } }
         )
     }
 }
